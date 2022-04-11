@@ -3,7 +3,6 @@
 # Load libraries ----------------------------------------------------------
 require(pacman)
 pacman::p_load(geodata, terra, fs, tidyverse, glue, raster, rgdal, rgeos, gtools)
-
 source('./00 biofunctions.R')
 
 # Function ----------------------------------------------------------------
@@ -35,11 +34,55 @@ etps <- function(dir){
   cat('Done!\n')
   
 }
+etps_bios <- function(dir){
+  
+  # dir <- dirs[1]
+  
+  cat(basename(dir), '\t')
+  fls <- dir_ls(dir)
+  ppt <- grep('prec', fls, value = T) %>% as.character %>% raster::stack()
+  etp <- grep('etps', fls, value = T) %>% as.character %>% raster::stack()
+  tmx <- grep('tmin', fls, value = T) %>% as.character %>% raster::stack()
+  tmn <- grep('tmax', fls, value = T) %>% as.character %>% raster::stack()
+  tav <- (tmx + tmn) / 2
+  
+  # Biovariables 21 to 29 ---------------------------------------------------
+  etpr <- cbind(as.matrix(etp),as.matrix(ppt),as.matrix(tav))
+  etbi <- t(apply(etpr, 1, etpvars))
+  nmes <- paste0('bio_', 21:29)
+  zero <- ppt[[1]]
+  zero <- zero * 0 + 1
+  names(zero) <- 'zero'
+  
+  dout <- dir
+  
+  map(.x = 1:ncol(etbi), .f = function(k){
+    print(k)
+    lyer <- etp[[1]]
+    values(lyer) <- etbi[,k]
+    writeRaster(lyer, filename = glue('{dout}/{nmes[k]}.tif'), overwrite = TRUE)
+  })
+  
+  # Biovariables 30 to 33 ---------------------------------------------------
+  dfct <- ppt - etp
+  dftm <- cbind(as.matrix(dfct), as.matrix(tmn), as.matrix(tmx))
+  bios <- t(apply(dftm, 1, cumTemp))
+  nmes <- paste0('bio_', 30:33)
+  
+  map(.x = 1:ncol(bios), .f = function(k){
+    print(k)
+    lyer <- etp[[1]]
+    values(lyer) <- bios[,k]
+    writeRaster(lyer, filename = glue('{dout}/{nmes[k]}.tif'), overwrite = TRUE)
+  })
+  
+  cat('Finish!\n')
+  
+}
 
 # Load data ---------------------------------------------------------------
 limt <- geodata::gadm(country = 'VNM', level = 0, path = '../tmpr')
 limt <- as(limt, 'Spatial')
-
 dirs <- dir_ls('../raster/future/370/2021-2040')
 mask <- raster('../raster/future/370/2021-2040/ACCESS-ESM1-5/prec.tif')[[1]] * 0 + 1
 
@@ -56,5 +99,5 @@ srad <- dir_ls(path = 'D:/OneDrive - CGIAR/Data/ET_SolRad') %>%
 # Make ETP variables ------------------------------------------------------
 purrr::map(dirs, etps)
 
-
-
+# Make etp bioclimatic ----------------------------------------------------
+purrr::map(dirs, etps_bios)
